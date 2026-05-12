@@ -7,27 +7,7 @@ import os from 'os';
 
 // Ensure absolute path for FFmpeg on Windows
 const ffmpegStatic = require('ffmpeg-static');
-let ffmpegPath = path.resolve(ffmpegStatic);
-
-// Fix for potential "ROOT" path issue in some environments
-if (ffmpegPath.includes('\\ROOT\\')) {
-  const actualRoot = process.cwd().split('Downloads')[0];
-  ffmpegPath = ffmpegPath.replace('C:\\ROOT\\', actualRoot);
-}
-
-console.log('Constructed FFmpeg Path:', ffmpegPath);
-
-// Verify if file exists at this path
-if (!fs.existsSync(ffmpegPath)) {
-  console.error('FFmpeg binary NOT found at:', ffmpegPath);
-  // Fallback to searching in node_modules relative to cwd
-  const fallbackPath = path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
-  if (fs.existsSync(fallbackPath)) {
-    ffmpegPath = fallbackPath;
-    console.log('Using fallback FFmpeg Path:', ffmpegPath);
-  }
-}
-
+const ffmpegPath = ffmpegStatic || '';
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 export async function POST(request: NextRequest) {
