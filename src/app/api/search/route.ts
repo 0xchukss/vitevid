@@ -1,30 +1,35 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
-import * as cheerio from 'cheerio';
+import { load } from 'cheerio';
 
 const cache = new Map<string, { data: any, timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const query = searchParams.get('q');
-  const type = searchParams.get('type') || 'all';
-  const era = searchParams.get('era') || '';
-
-  if (!query) {
-    return NextResponse.json({ error: 'Query is required' }, { status: 400 });
+// Configure axios default timeout
+const axiosInstance = axios.create({
+  timeout: 10000, // 10 seconds timeout
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
   }
+});
 
-  const cacheKey = `${query}-${type}-${era}`;
-  // Temporarily disable cache to verify Smithsonian results
-  /*
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return NextResponse.json({ results: cached.data, cached: true });
-  }
-  */
-
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get('q');
+    const type = searchParams.get('type') || 'all';
+    const era = searchParams.get('era') || '';
+
+    if (!query) {
+      return NextResponse.json({ error: 'Query is required' }, { status: 400 });
+    }
+
+    const cacheKey = `${query}-${type}-${era}`;
+    const cached = cache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      return NextResponse.json({ results: cached.data, cached: true });
+    }
+
     const results = await Promise.allSettled([
       searchInternetArchive(query, type, era),
       searchLOC(query, type, era),
@@ -35,38 +40,37 @@ export async function GET(request: Request) {
     ]);
 
     const flatResults = results
-      .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
-      .flatMap((r) => r.value);
+      .filter((r) => r.status === 'fulfilled')
+      .flatMap((r: any) => r.value || []);
 
     // Save to cache
     cache.set(cacheKey, { data: flatResults, timestamp: Date.now() });
 
-    // Sort by downloads or relevance (mocking relevance by order)
     return NextResponse.json({ results: flatResults });
-  } catch (error) {
-    console.error('Search error:', error);
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Search API Error:', error);
+    return NextResponse.json({ 
+      error: 'Search failed', 
+      details: error.message 
+    }, { status: 500 });
   }
 }
 
 async function searchSmithsonian(query: string, type: string, era: string) {
   const API_KEY = process.env.SMITHSONIAN_API_KEY || 'DEMO_KEY';
   const q = `${query} ${era}`.trim();
-  // Smithsonian API search
   const url = `https://api.si.edu/openaccess/api/v1.0/search?q=${encodeURIComponent(q)}&api_key=${API_KEY}&rows=50`;
 
   try {
-    const response = await axios.get(url);
-    const rows = response.data.response?.rows || [];
+    const response = await axiosInstance.get(url);
+    const rows = response.data?.response?.rows || [];
 
     return rows.map((row: any) => {
       const content = row.content;
-      const media = content.descriptiveNonRepeating?.online_media?.media || [];
-      // Prefer larger images for thumbnails if available
+      const media = content?.descriptiveNonRepeating?.online_media?.media || [];
       const thumbnail = media[0]?.thumbnail || media[0]?.content || '';
       const downloadUrl = media[0]?.content || '';
-      
-      const year = content.freetext?.date?.[0]?.content || row.year || '';
+      const year = content?.freetext?.date?.[0]?.content || row.year || '';
 
       return {
         id: row.id,
@@ -75,9 +79,9 @@ async function searchSmithsonian(query: string, type: string, era: string) {
         type: 'image', 
         year,
         thumbnail,
-        description: content.descriptiveNonRepeating?.metadata_usage?.text || '',
+        description: content?.descriptiveNonRepeating?.metadata_usage?.text || '',
         downloads: 0,
-        tags: content.indexedStructured?.topic || [],
+        tags: content?.indexedStructured?.topic || [],
         downloadUrl,
       };
     }).filter((item: any) => item.thumbnail);
@@ -92,17 +96,15 @@ async function searchInternetArchive(query: string, type: string, era: string) {
   if (type === 'video') mediatype = 'mediatype:movies';
   if (type === 'image') mediatype = 'mediatype:image';
 
-  // Strictly target Prelinger collection for copyright-free content
   const fullQuery = `${mediatype} AND (collection:prelinger) AND "${query}" ${era}`;
   const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(fullQuery)}&fl[]=identifier,title,mediatype,year,description,subject,downloads&rows=50&output=json&sort[]=downloads+desc`;
 
   try {
-    const response = await axios.get(url);
-    const docs = response.data.response.docs;
+    const response = await axiosInstance.get(url);
+    const docs = response.data?.response?.docs || [];
 
     return docs.map((doc: any) => {
-      // Smart tagging
-      const tags = [...(doc.subject || []), ...(doc.title.split(' '))].filter(t => t.length > 3).slice(0, 10);
+      const tags = [...(doc.subject || []), ...(doc.title?.split(' ') || [])].filter(t => t.length > 3).slice(0, 10);
       
       return {
         id: doc.identifier,
@@ -115,15 +117,13 @@ async function searchInternetArchive(query: string, type: string, era: string) {
         description: doc.description || '',
         downloads: doc.downloads || 0,
         tags: Array.from(new Set(tags)),
-        // Heuristic: for videos, we try to guess the MP4 name. 
-        // Actual discovery happens in the download/clip routes if this fails.
         downloadUrl: doc.mediatype === 'movies' 
           ? `https://archive.org/download/${doc.identifier}/${doc.identifier}.mp4` 
           : `https://archive.org/download/${doc.identifier}/${doc.identifier}.jpg`,
       };
     });
-  } catch (err) {
-    console.error('IA Search Error:', err);
+  } catch (err: any) {
+    console.error('IA Search Error:', err.message);
     return [];
   }
 }
@@ -134,22 +134,22 @@ async function searchLOC(query: string, type: string, era: string) {
   const url = `https://www.loc.gov/photos/?q=${encodeURIComponent(fullQuery)}&fo=json&c=50${fa ? `&fa=${encodeURIComponent(fa)}` : ''}`;
 
   try {
-    const response = await axios.get(url);
-    const results = response.data.results || [];
+    const response = await axiosInstance.get(url);
+    const results = response.data?.results || [];
 
     return results.map((item: any) => ({
       id: item.id,
       source: 'Library of Congress',
       title: item.title,
-      type: item.original_format && item.original_format[0].includes('video') ? 'video' : 'image',
+      type: (item.original_format && item.original_format[0]?.includes('video')) ? 'video' : 'image',
       thumbnail: item.image_url ? item.image_url[item.image_url.length - 1] : '',
       url: item.url,
       year: item.date || '',
       description: item.description ? item.description[0] : '',
       downloadUrl: item.image_url ? item.image_url[item.image_url.length - 1] : '',
     }));
-  } catch (err) {
-    console.error('LOC Search Error:', err);
+  } catch (err: any) {
+    console.error('LOC Search Error:', err.message);
     return [];
   }
 }
@@ -157,28 +157,59 @@ async function searchLOC(query: string, type: string, era: string) {
 async function searchPexels(query: string, type: string) {
   const API_KEY = process.env.PEXELS_API_KEY;
   if (API_KEY) {
-    // Official API logic
-    const endpoint = type === 'video' ? 'videos/search' : 'search';
-    const url = `https://api.pexels.com/v1/${endpoint}?query=${encodeURIComponent(query)}&per_page=30`;
     try {
-      const response = await axios.get(url, { headers: { Authorization: API_KEY } });
-      const items = type === 'video' ? response.data.videos : response.data.photos;
-      return items.map((item: any) => ({
-        id: `pexels-${item.id}`,
-        source: 'Pexels',
-        title: item.alt || 'Pexels Asset',
-        type: type === 'video' ? 'video' : 'image',
-        thumbnail: type === 'video' ? item.image : item.src.medium,
-        downloadUrl: type === 'video' ? item.video_files[0]?.link : item.src.original,
-      }));
-    } catch (err) {}
+      if (type === 'all') {
+        const [photoRes, videoRes] = await Promise.all([
+          axiosInstance.get(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=15`, { headers: { Authorization: API_KEY } }),
+          axiosInstance.get(`https://api.pexels.com/v1/videos/search?query=${encodeURIComponent(query)}&per_page=15`, { headers: { Authorization: API_KEY } })
+        ]);
+
+        const photos = (photoRes.data.photos || []).map((item: any) => ({
+          id: `pexels-photo-${item.id}`,
+          source: 'Pexels',
+          title: item.alt || 'Pexels Photo',
+          type: 'image',
+          thumbnail: item.src.medium,
+          downloadUrl: item.src.original,
+          url: item.url
+        }));
+
+        const videos = (videoRes.data.videos || []).map((item: any) => ({
+          id: `pexels-video-${item.id}`,
+          source: 'Pexels',
+          title: item.alt || 'Pexels Video',
+          type: 'video',
+          thumbnail: item.image,
+          downloadUrl: item.video_files[0]?.link,
+          url: item.url
+        }));
+
+        return [...photos, ...videos];
+      } else {
+        const endpoint = type === 'video' ? 'videos/search' : 'search';
+        const url = `https://api.pexels.com/v1/${endpoint}?query=${encodeURIComponent(query)}&per_page=30`;
+        const response = await axiosInstance.get(url, { headers: { Authorization: API_KEY } });
+        const items = type === 'video' ? response.data.videos : response.data.photos;
+        
+        return items.map((item: any) => ({
+          id: `pexels-${type}-${item.id}`,
+          source: 'Pexels',
+          title: item.alt || `Pexels ${type}`,
+          type: type === 'video' ? 'video' : 'image',
+          thumbnail: type === 'video' ? item.image : item.src.medium,
+          downloadUrl: type === 'video' ? item.video_files[0]?.link : item.src.original,
+          url: item.url
+        }));
+      }
+    } catch (err: any) {
+      console.error('Pexels API Error:', err.message);
+    }
   }
 
-  // Scraper Fallback
   try {
     const url = `https://www.pexels.com/search/${encodeURIComponent(query)}/`;
-    const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const $ = cheerio.load(data);
+    const { data } = await axiosInstance.get(url);
+    const $ = load(data);
     const results: any[] = [];
     
     $('article').each((i, el) => {
@@ -196,7 +227,31 @@ async function searchPexels(query: string, type: string) {
         });
       }
     });
-    return results;
+    if (results.length > 0) return results;
+  } catch (err) {}
+
+  // Workaround: Use Google to find Pexels images
+  try {
+    const url = `https://www.google.com/search?q=site:pexels.com+${encodeURIComponent(query)}&tbm=isch&safe=active`;
+    const { data } = await axiosInstance.get(url);
+    const $ = load(data);
+    const results: any[] = [];
+
+    $('img').each((i, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-iurl');
+      if (src && (src.startsWith('http') || src.startsWith('data:image'))) {
+        // Try to find the original pexels ID if possible from the alt or nearby text
+        results.push({
+          id: `pexels-google-${i}`,
+          source: 'Pexels (via Google)',
+          title: $(el).attr('alt') || 'Pexels Image',
+          type: 'image',
+          thumbnail: src,
+          downloadUrl: src,
+        });
+      }
+    });
+    return results.filter(r => r.thumbnail.length > 50).slice(0, 30);
   } catch (err) {
     return [];
   }
@@ -205,26 +260,58 @@ async function searchPexels(query: string, type: string) {
 async function searchPixabay(query: string, type: string) {
   const API_KEY = process.env.PIXABAY_API_KEY;
   if (API_KEY) {
-    const endpoint = type === 'video' ? 'videos/' : '';
-    const url = `https://pixabay.com/api/${endpoint}?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=30`;
     try {
-      const response = await axios.get(url);
-      return response.data.hits.map((item: any) => ({
-        id: `pixabay-${item.id}`,
-        source: 'Pixabay',
-        title: item.tags || 'Pixabay Asset',
-        type: type === 'video' ? 'video' : 'image',
-        thumbnail: type === 'video' ? `https://i.vimeocdn.com/video/${item.picture_id}_640x360.jpg` : item.webformatURL,
-        downloadUrl: type === 'video' ? item.videos.large.url : item.largeImageURL,
-      }));
-    } catch (err) {}
+      if (type === 'all') {
+        const [photoRes, videoRes] = await Promise.all([
+          axiosInstance.get(`https://pixabay.com/api/?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=15`),
+          axiosInstance.get(`https://pixabay.com/api/videos/?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=15`)
+        ]);
+
+        const photos = (photoRes.data.hits || []).map((item: any) => ({
+          id: `pixabay-photo-${item.id}`,
+          source: 'Pixabay',
+          title: item.tags || 'Pixabay Photo',
+          type: 'image',
+          thumbnail: item.webformatURL,
+          downloadUrl: item.largeImageURL,
+          url: item.pageURL
+        }));
+
+        const videos = (videoRes.data.hits || []).map((item: any) => ({
+          id: `pixabay-video-${item.id}`,
+          source: 'Pixabay',
+          title: item.tags || 'Pixabay Video',
+          type: 'video',
+          thumbnail: item.videos.medium?.thumbnail || item.videos.tiny?.thumbnail,
+          downloadUrl: item.videos.large?.url || item.videos.medium?.url,
+          url: item.pageURL
+        }));
+
+        return [...photos, ...videos];
+      } else {
+        const endpoint = type === 'video' ? 'videos/' : '';
+        const url = `https://pixabay.com/api/${endpoint}?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=30`;
+        const response = await axiosInstance.get(url);
+        
+        return response.data.hits.map((item: any) => ({
+          id: `pixabay-${type}-${item.id}`,
+          source: 'Pixabay',
+          title: item.tags || `Pixabay ${type}`,
+          type: type === 'video' ? 'video' : 'image',
+          thumbnail: type === 'video' ? (item.videos.medium?.thumbnail || item.videos.tiny?.thumbnail) : item.webformatURL,
+          downloadUrl: type === 'video' ? (item.videos.large?.url || item.videos.medium?.url) : item.largeImageURL,
+          url: item.pageURL
+        }));
+      }
+    } catch (err: any) {
+      console.error('Pixabay API Error:', err.message);
+    }
   }
 
-  // Scraper Fallback
   try {
     const url = `https://pixabay.com/images/search/${encodeURIComponent(query)}/`;
-    const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const $ = cheerio.load(data);
+    const { data } = await axiosInstance.get(url);
+    const $ = load(data);
     const results: any[] = [];
     
     $('.container--37YpY img').each((i, el) => {
@@ -248,20 +335,12 @@ async function searchPixabay(query: string, type: string) {
 }
 
 async function searchGoogle(query: string, type: string) {
-  // Scraper for Google Images (API-less)
   try {
     const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch&safe=active&nfpr=1`;
-    const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      }
-    });
-    const $ = cheerio.load(data);
+    const { data } = await axiosInstance.get(url);
+    const $ = load(data);
     const results: any[] = [];
     
-    // Modern Google Images uses a mix of <img> and data-iurl
     $('img').each((i, el) => {
       const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-iurl');
       if (src && (src.startsWith('http') || src.startsWith('data:image'))) {
@@ -276,12 +355,11 @@ async function searchGoogle(query: string, type: string) {
       }
     });
 
-    // Fallback: If Google returns very few results (blocking), try DuckDuckGo Images
     if (results.length < 5) {
       try {
         const ddgUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}+images`;
-        const { data: ddgData } = await axios.get(ddgUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        const $$ = cheerio.load(ddgData);
+        const { data: ddgData } = await axiosInstance.get(ddgUrl);
+        const $$ = load(ddgData);
         $$('img').each((i, el) => {
           const src = $$(el).attr('src');
           if (src && src.includes('http')) {

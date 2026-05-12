@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { items } = await request.json(); // Array of items to download
 
@@ -14,12 +14,14 @@ export async function POST(request: Request) {
 
     // Detect if running on Vercel/Serverless
     const isVercel = process.env.VERCEL === '1';
+    // Use system Downloads folder on local PC, /tmp on Vercel
     const baseDir = isVercel ? '/tmp' : path.join(os.homedir(), 'Downloads');
     
     const downloadDir = baseDir;
     await fs.ensureDir(downloadDir);
 
-    const results = await Promise.all(items.map(async (item: any) => {
+    const results = [];
+    for (const item of items) {
       try {
         let downloadUrl = item.downloadUrl;
 
@@ -42,17 +44,28 @@ export async function POST(request: Request) {
           }
         }
 
-        const cleanName = item.title
+        const extension = item.type === 'video' ? '.mp4' : '.jpg';
+        const cleanBase = item.title
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '_')
-          .substring(0, 50) + (item.type === 'video' ? '.mp4' : '.jpg');
+          .substring(0, 50);
         
-        const finalFilename = `${item.year ? item.year + '_' : ''}${cleanName}`;
-        const filePath = path.join(downloadDir, finalFilename);
+        const baseFilename = `${item.year ? item.year + '_' : ''}${cleanBase}`;
+        
+        let counter = 0;
+        let finalFilename = `${baseFilename}${extension}`;
+        let filePath = path.join(downloadDir, finalFilename);
+
+        // Prevent overwriting existing files by appending a counter
+        while (await fs.pathExists(filePath)) {
+          counter++;
+          finalFilename = `${baseFilename} (${counter})${extension}`;
+          filePath = path.join(downloadDir, finalFilename);
+        }
 
         if (downloadUrl.startsWith('data:image')) {
           const base64Data = downloadUrl.split(';base64,').pop();
-          await fs.writeFile(filePath, base64Data, { encoding: 'base64' });
+          await fs.writeFile(filePath, base64Data || '', { encoding: 'base64' });
         } else {
           const response = await axios({
             url: downloadUrl,
@@ -88,12 +101,12 @@ export async function POST(request: Request) {
         });
         await fs.writeJson(metadataPath, metadata, { spaces: 2 });
 
-        return { id: item.id, status: 'success', filename: finalFilename, path: filePath };
+        results.push({ id: item.id, status: 'success', filename: finalFilename, path: filePath });
       } catch (err: any) {
         console.error(`Failed to download ${item.id}:`, err.message);
-        return { id: item.id, status: 'error', error: err.message };
+        results.push({ id: item.id, status: 'error', error: err.message });
       }
-    }));
+    }
 
     // Optional: Open folder if multiple items were downloaded
     if (items.length > 1 && results.some(r => r.status === 'success')) {

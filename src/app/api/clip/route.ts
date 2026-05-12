@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import fs from 'fs-extra';
@@ -7,7 +7,7 @@ import os from 'os';
 
 // Ensure absolute path for FFmpeg on Windows
 const ffmpegStatic = require('ffmpeg-static');
-let ffmpegPath = path.resolve(/* turbopackIgnore: true */ ffmpegStatic);
+let ffmpegPath = path.resolve(ffmpegStatic);
 
 // Fix for potential "ROOT" path issue in some environments
 if (ffmpegPath.includes('\\ROOT\\')) {
@@ -30,7 +30,7 @@ if (!fs.existsSync(ffmpegPath)) {
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { item, start, end, customName } = await request.json();
     
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
 
     // Detect if running on Vercel/Serverless
     const isVercel = process.env.VERCEL === '1';
+    // Use system Downloads folder on local PC, /tmp on Vercel
     const baseDir = isVercel ? '/tmp' : path.join(os.homedir(), 'Downloads');
     
     const downloadDir = baseDir;
@@ -52,8 +53,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 });
     }
     const cleanName = item.title.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 30);
-    const clipFilename = customName ? `${customName}.mp4` : `clip_${Math.floor(start)}s_${Math.floor(end)}s_${cleanName}.mp4`;
-    const outputPath = path.join(downloadDir, clipFilename);
+    const baseClipFilename = customName || `clip_${Math.floor(start)}s_${Math.floor(end)}s_${cleanName}`;
+    
+    let counter = 0;
+    let clipFilename = `${baseClipFilename}.mp4`;
+    let outputPath = path.join(downloadDir, clipFilename);
+
+    // Prevent overwriting existing files by appending a counter
+    while (await fs.pathExists(outputPath)) {
+      counter++;
+      clipFilename = `${baseClipFilename} (${counter}).mp4`;
+      outputPath = path.join(downloadDir, clipFilename);
+    }
 
     // We need the direct video URL. 
     // If it's an IA item, we might need to find the MP4 again.
@@ -68,7 +79,7 @@ export async function POST(request: Request) {
       }
     }
 
-    console.log(`Clipping from ${videoUrl} starting at ${start} for ${duration}s`);
+    console.log(`Clipping from ${videoUrl} starting at ${start} for ${duration}s -> ${outputPath}`);
 
     await new Promise((resolve, reject) => {
       ffmpeg(videoUrl)
@@ -86,15 +97,21 @@ export async function POST(request: Request) {
         .run();
     });
 
-    // Save metadata for the clip
+    // Save metadata for the clip - read just before writing to minimize race window
+    // (Still not perfect without a lock but better than nothing for local app)
     const metadataPath = path.join(downloadDir, 'metadata.json');
     let metadata = [];
     if (await fs.pathExists(metadataPath)) {
-      metadata = await fs.readJson(metadataPath);
+      try {
+        metadata = await fs.readJson(metadataPath);
+      } catch (e) {
+        console.error('Failed to read metadata, starting fresh');
+      }
     }
+    
     metadata.push({
       ...item,
-      id: `${item.id}_clip_${start}_${end}`,
+      id: `${item.id}_clip_${start}_${end}_${Date.now()}`,
       title: `${item.title} (Clip ${start}s-${end}s)`,
       localPath: outputPath,
       type: 'video-clip',
