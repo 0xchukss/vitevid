@@ -7,8 +7,17 @@ import os from 'os';
 
 // Ensure absolute path for FFmpeg on Windows
 const ffmpegStatic = require('ffmpeg-static');
-const ffmpegPath = ffmpegStatic || '';
+const ffmpegBinaryName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+const runtimeCwd = globalThis.process?.cwd?.() || '';
+const fallbackFfmpegPath = `${runtimeCwd}/node_modules/ffmpeg-static/${ffmpegBinaryName}`;
+const ffmpegPath = ffmpegStatic && fs.existsSync(ffmpegStatic)
+  ? ffmpegStatic
+  : fallbackFfmpegPath;
 ffmpeg.setFfmpegPath(ffmpegPath);
+
+function contentDispositionFilename(filename: string) {
+  return filename.replace(/["\r\n]/g, '_');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,13 +46,13 @@ export async function POST(request: NextRequest) {
     
     let counter = 0;
     let clipFilename = `${baseClipFilename}.mp4`;
-    let outputPath = path.join(downloadDir, clipFilename);
+    let outputPath = path.join(isVercel ? tempDir : downloadDir, clipFilename);
 
     // Prevent overwriting existing files by appending a counter
     while (await fs.pathExists(outputPath)) {
       counter++;
       clipFilename = `${baseClipFilename} (${counter}).mp4`;
-      outputPath = path.join(downloadDir, clipFilename);
+      outputPath = path.join(isVercel ? tempDir : downloadDir, clipFilename);
     }
 
     // We need the direct video URL. 
@@ -76,6 +85,19 @@ export async function POST(request: NextRequest) {
         })
         .run();
     });
+
+    if (isVercel) {
+      const clipBuffer = await fs.readFile(outputPath);
+      await fs.remove(outputPath);
+
+      return new Response(clipBuffer, {
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Content-Disposition': `attachment; filename="${contentDispositionFilename(clipFilename)}"`,
+          'Content-Length': String(clipBuffer.length),
+        },
+      });
+    }
 
     // Save metadata for the clip - read just before writing to minimize race window
     // (Still not perfect without a lock but better than nothing for local app)

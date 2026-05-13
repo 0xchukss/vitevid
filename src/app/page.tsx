@@ -9,6 +9,23 @@ import { ResultItem } from '@/types';
 
 import ScriptSequencer from '@/components/ScriptSequencer';
 
+function getDownloadFilename(response: Response, fallback: string) {
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/i);
+  return match?.[1] || fallback;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'search' | 'script'>('search');
   const [results, setResults] = useState<ResultItem[]>([]);
@@ -103,6 +120,22 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item, start, end, customName }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Clipping failed' }));
+        alert(`Clipping Error: ${errorData.error}${errorData.path ? `\nPath: ${errorData.path}` : ''}`);
+        return;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('video/mp4')) {
+        const blob = await response.blob();
+        const filename = getDownloadFilename(response, `${customName || item.title || 'clip'}.mp4`);
+        downloadBlob(blob, filename);
+        alert(`Clip downloaded: ${filename}`);
+        return;
+      }
+
       const data = await response.json();
       
       if (data.status === 'success') {
