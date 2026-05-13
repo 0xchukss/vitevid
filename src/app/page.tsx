@@ -15,6 +15,14 @@ function getDownloadFilename(response: Response, fallback: string) {
   return match?.[1] || fallback;
 }
 
+function fallbackFilename(item: ResultItem) {
+  const cleanTitle = (item.title || 'download')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .substring(0, 50);
+  return `${cleanTitle}${item.type === 'video' ? '.mp4' : '.jpg'}`;
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -93,6 +101,22 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: [item] }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
+        alert(`Error: ${errorData.error || 'Download failed'}`);
+        return;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const blob = await response.blob();
+        const filename = getDownloadFilename(response, fallbackFilename(item));
+        downloadBlob(blob, filename);
+        setDownloadedPaths(prev => ({ ...prev, [item.id]: filename }));
+        return;
+      }
+
       const data = await response.json();
       const result = data.results[0];
       
@@ -159,33 +183,14 @@ export default function Home() {
     const itemsToDownload = results.filter((item) => selectedIds.has(item.id));
     if (itemsToDownload.length === 0) return;
 
-    itemsToDownload.forEach(item => setDownloadingItems(prev => new Set(prev).add(item.id)));
-    
-    try {
-      const response = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsToDownload }),
-      });
-      const data = await response.json();
-      
-      const newPaths = { ...downloadedPaths };
-      data.results.forEach((res: any) => {
-        if (res.status === 'success') {
-          newPaths[res.id] = res.path;
-        }
-      });
-      setDownloadedPaths(newPaths);
+    try {      
+      for (const item of itemsToDownload) {
+        await handleDownload(item);
+      }
       setSelectedIds(new Set());
-      alert(`Batch download complete! ${data.results.filter((r: any) => r.status === 'success').length} files saved.`);
+      alert(`Batch download started for ${itemsToDownload.length} item(s).`);
     } catch (error) {
       console.error('Batch download failed:', error);
-    } finally {
-      itemsToDownload.forEach(item => setDownloadingItems(prev => {
-        const next = new Set(prev);
-        next.delete(item.id);
-        return next;
-      }));
     }
   };
 

@@ -4,6 +4,19 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 
+function contentDispositionFilename(filename: string) {
+  return filename.replace(/["\r\n]/g, '_');
+}
+
+function extensionFromContentType(contentType: string, fallback: string) {
+  if (contentType.includes('png')) return '.png';
+  if (contentType.includes('webp')) return '.webp';
+  if (contentType.includes('gif')) return '.gif';
+  if (contentType.includes('mp4')) return '.mp4';
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return '.jpg';
+  return fallback;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { items } = await request.json(); // Array of items to download
@@ -55,6 +68,50 @@ export async function POST(request: NextRequest) {
         let counter = 0;
         let finalFilename = `${baseFilename}${extension}`;
         let filePath = path.join(downloadDir, finalFilename);
+
+        if (isVercel && items.length > 1) {
+          results.push({
+            id: item.id,
+            status: 'error',
+            error: 'Batch downloads are handled one file at a time in the browser',
+          });
+          continue;
+        }
+
+        if (isVercel) {
+          if (downloadUrl.startsWith('data:image')) {
+            const [meta, base64Data = ''] = downloadUrl.split(',');
+            const mimeMatch = meta.match(/^data:([^;]+)/);
+            const contentType = mimeMatch?.[1] || 'image/jpeg';
+            const browserFilename = `${baseFilename}${extensionFromContentType(contentType, extension)}`;
+            const buffer = Buffer.from(base64Data, 'base64');
+
+            return new Response(buffer, {
+              headers: {
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${contentDispositionFilename(browserFilename)}"`,
+                'Content-Length': String(buffer.length),
+              },
+            });
+          }
+
+          const response = await axios({
+            url: downloadUrl,
+            method: 'GET',
+            responseType: 'arraybuffer',
+          });
+          const contentType = String(response.headers['content-type'] || (item.type === 'video' ? 'video/mp4' : 'image/jpeg'));
+          const browserFilename = `${baseFilename}${extensionFromContentType(contentType, extension)}`;
+          const buffer = Buffer.from(response.data);
+
+          return new Response(buffer, {
+            headers: {
+              'Content-Type': contentType,
+              'Content-Disposition': `attachment; filename="${contentDispositionFilename(browserFilename)}"`,
+              'Content-Length': String(buffer.length),
+            },
+          });
+        }
 
         // Prevent overwriting existing files by appending a counter
         while (await fs.pathExists(filePath)) {
