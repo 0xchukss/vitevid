@@ -289,12 +289,12 @@ async function searchPixabay(query: string, type: string) {
   if (API_KEY) {
     try {
       if (type === 'all') {
-        const [photoRes, videoRes] = await Promise.all([
-          axiosInstance.get(`https://pixabay.com/api/?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=15`),
-          axiosInstance.get(`https://pixabay.com/api/videos/?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=15`)
+        const [photoRes, videoRes] = await Promise.allSettled([
+          axiosInstance.get(`https://pixabay.com/api/?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=8`),
+          axiosInstance.get(`https://pixabay.com/api/videos/?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=8`)
         ]);
 
-        const photos = (photoRes.data.hits || []).map((item: any) => ({
+        const photos = (photoRes.status === 'fulfilled' ? photoRes.value.data.hits || [] : []).map((item: any) => ({
           id: `pixabay-photo-${item.id}`,
           source: 'Pixabay',
           title: item.tags || 'Pixabay Photo',
@@ -304,7 +304,7 @@ async function searchPixabay(query: string, type: string) {
           url: item.pageURL
         }));
 
-        const videos = (videoRes.data.hits || []).map((item: any) => ({
+        const videos = (videoRes.status === 'fulfilled' ? videoRes.value.data.hits || [] : []).map((item: any) => ({
           id: `pixabay-video-${item.id}`,
           source: 'Pixabay',
           title: item.tags || 'Pixabay Video',
@@ -314,10 +314,10 @@ async function searchPixabay(query: string, type: string) {
           url: item.pageURL
         }));
 
-        return [...photos, ...videos];
+        if (photos.length > 0 || videos.length > 0) return [...photos, ...videos];
       } else {
         const endpoint = type === 'video' ? 'videos/' : '';
-        const url = `https://pixabay.com/api/${endpoint}?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=30`;
+        const url = `https://pixabay.com/api/${endpoint}?key=${API_KEY}&q=${encodeURIComponent(query)}&per_page=12`;
         const response = await axiosInstance.get(url);
         
         return response.data.hits.map((item: any) => ({
