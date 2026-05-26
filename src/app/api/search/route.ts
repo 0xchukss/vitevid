@@ -186,12 +186,12 @@ async function searchPexels(query: string, type: string) {
   if (API_KEY) {
     try {
       if (type === 'all') {
-        const [photoRes, videoRes] = await Promise.all([
-          axiosInstance.get(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=15`, { headers: { Authorization: API_KEY } }),
-          axiosInstance.get(`https://api.pexels.com/v1/videos/search?query=${encodeURIComponent(query)}&per_page=15`, { headers: { Authorization: API_KEY } })
+        const [photoRes, videoRes] = await Promise.allSettled([
+          axiosInstance.get(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=8`, { headers: { Authorization: API_KEY } }),
+          axiosInstance.get(`https://api.pexels.com/v1/videos/search?query=${encodeURIComponent(query)}&per_page=8`, { headers: { Authorization: API_KEY } })
         ]);
 
-        const photos = (photoRes.data.photos || []).map((item: any) => ({
+        const photos = (photoRes.status === 'fulfilled' ? photoRes.value.data.photos || [] : []).map((item: any) => ({
           id: `pexels-photo-${item.id}`,
           source: 'Pexels',
           title: item.alt || 'Pexels Photo',
@@ -201,7 +201,7 @@ async function searchPexels(query: string, type: string) {
           url: item.url
         }));
 
-        const videos = (videoRes.data.videos || []).map((item: any) => ({
+        const videos = (videoRes.status === 'fulfilled' ? videoRes.value.data.videos || [] : []).map((item: any) => ({
           id: `pexels-video-${item.id}`,
           source: 'Pexels',
           title: item.alt || 'Pexels Video',
@@ -211,10 +211,10 @@ async function searchPexels(query: string, type: string) {
           url: item.url
         }));
 
-        return [...photos, ...videos];
+        if (photos.length > 0 || videos.length > 0) return [...photos, ...videos];
       } else {
         const endpoint = type === 'video' ? 'videos/search' : 'search';
-        const url = `https://api.pexels.com/v1/${endpoint}?query=${encodeURIComponent(query)}&per_page=30`;
+        const url = `https://api.pexels.com/v1/${endpoint}?query=${encodeURIComponent(query)}&per_page=12`;
         const response = await axiosInstance.get(url, { headers: { Authorization: API_KEY } });
         const items = type === 'video' ? response.data.videos : response.data.photos;
         

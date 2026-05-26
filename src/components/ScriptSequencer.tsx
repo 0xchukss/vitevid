@@ -295,11 +295,15 @@ export default function ScriptSequencer({
           .filter(Boolean),
       ));
       const fetchResults = async (queries: string[]) => {
-        const responses = await Promise.all(queries.map((query) => fetch(
-          `/api/search?q=${encodeURIComponent(query)}&type=${preference}&providers=stock`,
-        )));
-        if (responses.some((response) => !response.ok)) throw new Error('Search failed');
-        return Promise.all(responses.map((response) => response.json()));
+        const payloads = [];
+        for (const query of queries) {
+          const response = await fetch(
+            `/api/search?q=${encodeURIComponent(query)}&type=${preference}&providers=stock`,
+          );
+          if (!response.ok) throw new Error('Search failed');
+          payloads.push(await response.json());
+        }
+        return payloads;
       };
       let queries = primaryQueries;
       let payloads = await fetchResults(queries);
@@ -394,7 +398,7 @@ export default function ScriptSequencer({
     };
 
     try {
-      const workerCount = Math.min(3, storyboard.length);
+      const workerCount = Math.min(2, storyboard.length);
       await Promise.all(Array.from({ length: workerCount }, () => runSearchWorker()));
     } finally {
       setIsSearching(false);
