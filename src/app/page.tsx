@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import SearchBar from '@/components/SearchBar';
 import ResultsGrid from '@/components/ResultsGrid';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -32,6 +32,12 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+interface RenderScene {
+  asset: ResultItem;
+  duration: number;
+  clipStart: number;
 }
 
 export default function Home() {
@@ -93,13 +99,13 @@ export default function Home() {
     }
   };
 
-  const handleDownload = async (item: ResultItem) => {
+  const handleDownload = async (item: ResultItem, customName?: string) => {
     setDownloadingItems((prev) => new Set(prev).add(item.id));
     try {
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [item] }),
+        body: JSON.stringify({ items: [item], customName }),
       });
 
       if (!response.ok) {
@@ -111,7 +117,10 @@ export default function Home() {
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
         const blob = await response.blob();
-        const filename = getDownloadFilename(response, fallbackFilename(item));
+        const filename = getDownloadFilename(
+          response,
+          customName ? `${customName}${item.type === 'video' ? '.mp4' : '.jpg'}` : fallbackFilename(item),
+        );
         downloadBlob(blob, filename);
         setDownloadedPaths(prev => ({ ...prev, [item.id]: filename }));
         return;
@@ -179,6 +188,30 @@ export default function Home() {
     }
   };
 
+  const renderBlock = async (scenes: RenderScene[], blockIndex: number, blockSeconds: number) => {
+    const response = await fetch('/api/render-block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenes, blockIndex, blockSeconds }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Block export failed' }));
+      throw new Error(errorData.error || 'Block export failed');
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('video/mp4')) {
+      const blob = await response.blob();
+      const filename = getDownloadFilename(response, `Storyboard_Block_${String(blockIndex + 1).padStart(3, '0')}.mp4`);
+      downloadBlob(blob, filename);
+      return filename;
+    }
+
+    const data = await response.json();
+    return data.path || data.filename || `Block ${blockIndex + 1}`;
+  };
+
   const handleBatchDownload = async () => {
     const itemsToDownload = results.filter((item) => selectedIds.has(item.id));
     if (itemsToDownload.length === 0) return;
@@ -215,7 +248,7 @@ export default function Home() {
             className={`tab-btn ${activeTab === 'script' ? 'active' : ''}`}
             onClick={() => setActiveTab('script')}
           >
-            Script Sequence
+            Auto Storyboard
           </button>
         </nav>
       </header>
@@ -253,6 +286,8 @@ export default function Home() {
       ) : (
         <ScriptSequencer 
           onDownloadScene={triggerClip}
+          onDownloadAsset={handleDownload}
+          onRenderBlock={renderBlock}
           isDownloading={(id) => downloadingItems.has(id)}
         />
       )}

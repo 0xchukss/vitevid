@@ -19,7 +19,7 @@ function extensionFromContentType(contentType: string, fallback: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { items } = await request.json(); // Array of items to download
+    const { items, customName } = await request.json(); // Array of items to download
 
     if (!items || !Array.isArray(items)) {
       return NextResponse.json({ error: 'Items array is required' }, { status: 400 });
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         }
 
         const extension = item.type === 'video' ? '.mp4' : '.jpg';
-        const cleanBase = item.title
+        const cleanBase = (typeof customName === 'string' && customName.trim() ? customName : item.title)
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '_')
           .substring(0, 50);
