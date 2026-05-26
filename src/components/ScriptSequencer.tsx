@@ -253,6 +253,7 @@ export default function ScriptSequencer({
   const [isSearching, setIsSearching] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionProgress, setTranscriptionProgress] = useState('');
+  const [startSceneNumber, setStartSceneNumber] = useState('1');
   const [blockSeconds, setBlockSeconds] = useState<30 | 45>(30);
   const [renderingBlocks, setRenderingBlocks] = useState(new Set<number>());
   const [exportMessage, setExportMessage] = useState('');
@@ -454,10 +455,26 @@ export default function ScriptSequencer({
     }
   };
 
-  const planAndSearchAllScenes = async () => {
-    for (let index = 0; index < scenes.length; index += scenesPerBlock) {
-      await planAndSearchStoryboard(scenes.slice(index, index + scenesPerBlock), mediaPreference);
+  const parseStartSceneIndex = (storyboard: Scene[]) => {
+    const requestedScene = Number(startSceneNumber);
+    if (!Number.isInteger(requestedScene) || requestedScene < 1 || requestedScene > storyboard.length) {
+      setError(`Choose a start scene between 1 and ${storyboard.length}.`);
+      return null;
     }
+
+    return requestedScene - 1;
+  };
+
+  const planAndSearchFromScene = async (storyboard: Scene[], startIndex: number) => {
+    for (let index = startIndex; index < storyboard.length; index += scenesPerBlock) {
+      await planAndSearchStoryboard(storyboard.slice(index, index + scenesPerBlock), mediaPreference);
+    }
+  };
+
+  const resumeMatching = async () => {
+    const startIndex = parseStartSceneIndex(scenes);
+    if (startIndex === null) return;
+    await planAndSearchFromScene(scenes, startIndex);
   };
 
   const createStoryboard = async (text: string, duration?: number) => {
@@ -467,11 +484,18 @@ export default function ScriptSequencer({
       return;
     }
 
+    const startIndex = parseStartSceneIndex(storyboard);
+    if (startIndex === null) return;
+
     setError('');
     setIsProcessing(true);
     setScenes(storyboard);
     setIsProcessing(false);
-    await planAndSearchStoryboard(storyboard.slice(0, scenesPerBlock), mediaPreference);
+    await planAndSearchStoryboard(storyboard.slice(startIndex, startIndex + scenesPerBlock), mediaPreference);
+    const nextStartIndex = startIndex + scenesPerBlock;
+    if (nextStartIndex < storyboard.length) {
+      setStartSceneNumber(String(nextStartIndex + 1));
+    }
   };
 
   const handleAudioChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -660,6 +684,16 @@ export default function ScriptSequencer({
         {exportMessage && <div className="storyboard-success">{exportMessage}</div>}
 
         <div className="storyboard-actions">
+          <label className="scene-start-input">
+            <span>Start scene</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={startSceneNumber}
+              onChange={(event) => setStartSceneNumber(event.target.value)}
+            />
+          </label>
           {scenes.length > 0 && (
             <button type="button" className="secondary-btn" onClick={() => setScenes([])}>
               Clear timeline
@@ -701,9 +735,9 @@ export default function ScriptSequencer({
                 type="button"
                 className="secondary-btn"
                 disabled={isPlanning || isSearching}
-                onClick={planAndSearchAllScenes}
+                onClick={resumeMatching}
               >
-                AI match all scenes
+                Match from scene {startSceneNumber || '...'}
               </button>
               <button
                 type="button"

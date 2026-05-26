@@ -742,6 +742,23 @@ select {
   justify-content: flex-end;
 }
 
+.scene-start-input {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.scene-start-input input[type="number"] {
+  width: 74px;
+  flex: none;
+  padding: 0.52rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
 .secondary-btn {
   padding: 0.65rem 1rem;
   border: 1px solid #4b5563;
@@ -1061,6 +1078,11 @@ button.primary:disabled {
   .runtime-input {
     align-self: stretch;
     justify-content: space-between;
+  }
+
+  .scene-start-input {
+    justify-content: space-between;
+    margin-right: 0;
   }
 
   .storyboard-scene {
