@@ -491,11 +491,7 @@ export default function ScriptSequencer({
     setIsProcessing(true);
     setScenes(storyboard);
     setIsProcessing(false);
-    await planAndSearchStoryboard(storyboard.slice(startIndex, startIndex + scenesPerBlock), mediaPreference);
-    const nextStartIndex = startIndex + scenesPerBlock;
-    if (nextStartIndex < storyboard.length) {
-      setStartSceneNumber(String(nextStartIndex + 1));
-    }
+    await planAndSearchFromScene(storyboard, startIndex);
   };
 
   const handleAudioChange = async (event: ChangeEvent<HTMLInputElement>) => {
