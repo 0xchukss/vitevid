@@ -42,7 +42,7 @@ interface PlannedScene {
   search_terms: string[];
 }
 
-const SCENE_SECONDS = 4;
+const SCENE_SECONDS = 5;
 const WORDS_PER_MINUTE = 150;
 const TRANSCRIPTION_CHUNK_SECONDS = 45;
 const TRANSCRIPTION_SAMPLE_RATE = 16000;

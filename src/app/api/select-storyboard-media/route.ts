@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model,
         instructions: [
-          'You select one Pexels or Pixabay visual asset for a four-second-or-shorter YouTube storyboard scene.',
+          'You select one Pexels or Pixabay visual asset for a five-second-or-shorter YouTube storyboard scene.',
           'Select only an ID from the provided candidate list.',
           'Choose the asset most literally useful for the visible scene, not one that merely shares a vague keyword.',
           'The visual style should feel vintage and American where the narration allows it.',

@@ -50,7 +50,7 @@ function isPlannedScene(scene: unknown): scene is PlannedScene {
     && typeof value.scene_text === 'string'
     && typeof value.duration_seconds === 'number'
     && value.duration_seconds > 0
-    && value.duration_seconds <= 4
+    && value.duration_seconds <= 5
     && typeof value.visual_description === 'string'
     && Array.isArray(value.search_terms)
     && value.search_terms.length >= 2
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         model,
         instructions: [
           'You are a video production assistant. Analyze a video script and break it down into scenes for a YouTube long-form video.',
-          'Each output scene represents one provided timeline slot and must be 4 seconds or less.',
+          'Each output scene represents one provided timeline slot and must be 5 seconds or less.',
           'Preserve every spoken word exactly once across scene_text fields, in the same order. Do not paraphrase or invent narration.',
           'Identify the visual content that best fits each moment in visual_description.',
           'Generate exactly 3 specific search terms optimized for Pixabay and Pexels.',
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
             : '',
           'Avoid abstract phrases, platform names, and non-American locations unless the script explicitly requires them.',
           `Return exactly ${slots.length} scenes, numbered consecutively beginning at ${startSceneNumber}.`,
-          'Use the requested duration for each corresponding timeline slot and never exceed 4 seconds.',
+          'Use the requested duration for each corresponding timeline slot and never exceed 5 seconds.',
           'Return only structured scene data and no explanatory text.',
         ].join(' '),
         input: JSON.stringify({
