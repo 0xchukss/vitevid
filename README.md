@@ -1,7 +1,6 @@
 # ViteVid
 
-<img width="525" height="373" alt="image" src="https://github.com/user-attachments/assets/2595ad24-f0ac-40b0-8e3b-9858695ae91d" />
-
+<img width="752" height="534" alt="image" src="https://github.com/user-attachments/assets/8ef64d5e-6a28-4164-86b0-11fb47760e6c" />
 
 
 
