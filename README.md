@@ -1,6 +1,6 @@
 # ViteVid
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![ViteVid](https://img.shields.io/badge/ViteVid-Video_Automation-ff69b4.svg?style=flat-square)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 ViteVid is a full video automation application that takes your voiceover and automatically edits a complete video around it. It generates storyboards, scrapes clips, and automatically applies sound effects, background music, captions, and pacing tailored to your specific YouTube niche.
 
