@@ -1,6 +1,11 @@
-<img width="810" height="2441" alt="image" src="https://github.com/user-attachments/assets/777ef7da-7540-4960-86e7-0cc593ea9264" /># ViteVid
+# ViteVid
 
 <img width="525" height="373" alt="image" src="https://github.com/user-attachments/assets/2595ad24-f0ac-40b0-8e3b-9858695ae91d" />
+
+
+
+
+
 
 [![ViteVid](https://img.shields.io/badge/ViteVid-Video_Automation-ff69b4.svg?style=flat-square)](#) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
