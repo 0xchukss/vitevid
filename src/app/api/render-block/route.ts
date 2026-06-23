@@ -6,6 +6,7 @@ import path from 'path';
 import axios from 'axios';
 import ffmpegStatic from 'ffmpeg-static';
 import { ResultItem } from '@/types';
+import { canAutoUseMedia, withMediaRights } from '@/lib/mediaRights';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -51,9 +52,13 @@ async function resolveAssetUrl(item: ResultItem) {
 }
 
 async function saveAsset(item: ResultItem, sceneDir: string, sceneIndex: number) {
+  const rightsCheckedItem = withMediaRights(item);
+  if (!canAutoUseMedia(rightsCheckedItem)) {
+    throw new Error(`Asset "${item.title}" is missing reusable license metadata and cannot be exported automatically.`);
+  }
   const extension = item.type === 'video' ? '.mp4' : '.jpg';
   const sourcePath = path.join(sceneDir, `source_${sceneIndex}${extension}`);
-  const url = await resolveAssetUrl(item);
+  const url = await resolveAssetUrl(rightsCheckedItem);
 
   if (url.startsWith('data:image')) {
     const base64Data = url.split(',')[1] || '';

@@ -10,4 +10,13 @@ export interface ResultItem {
   downloadUrl: string;
   downloads?: number;
   tags?: string[];
+  rightsStatus?: 'verified-safe' | 'open-license-filtered' | 'unfiltered-web' | 'needs-review' | 'blocked';
+  rightsLabel?: string;
+  rightsNote?: string;
+  license?: string;
+  licenseUrl?: string;
+  attribution?: string;
+  sourcePageUrl?: string;
+  isCopyrightSafe?: boolean;
+  needsRightsReview?: boolean;
 }

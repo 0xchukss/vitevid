@@ -34,14 +34,8 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-interface RenderScene {
-  asset: ResultItem;
-  duration: number;
-  clipStart: number;
-}
-
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'search' | 'script'>('search');
+  const [activeTab, setActiveTab] = useState<'projects' | 'search' | 'script' | 'pricing'>('projects');
   const [results, setResults] = useState<ResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPlayerLoading, setIsPlayerLoading] = useState(false);
@@ -50,10 +44,10 @@ export default function Home() {
   const [downloadedPaths, setDownloadedPaths] = useState<Record<string, string>>({});
   const [activeVideo, setActiveVideo] = useState<ResultItem | null>(null);
 
-  const handleSearch = async (query: string, type: string, era: string) => {
+  const handleSearch = async (query: string, type: string, era: string, niche: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}&era=${era}`);
+      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}&era=${era}&niche=${encodeURIComponent(niche)}`);
       const data = await response.json();
       setResults(data.results || []);
     } catch (error) {
@@ -80,7 +74,9 @@ export default function Home() {
         const response = await fetch(metaUrl);
         const data = await response.json();
         const files = data.files || [];
-        const mp4File = files.find((f: any) => f.name.endsWith('.mp4') && !f.name.includes('ia.mp4'));
+        const mp4File = files.find((file: { name: string }) => (
+          file.name.endsWith('.mp4') && !file.name.includes('ia.mp4')
+        ));
         
         if (mp4File) {
           const videoUrl = `https://archive.org/download/${item.id}/${mp4File.name}`;
@@ -188,30 +184,6 @@ export default function Home() {
     }
   };
 
-  const renderBlock = async (scenes: RenderScene[], blockIndex: number, blockSeconds: number) => {
-    const response = await fetch('/api/render-block', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scenes, blockIndex, blockSeconds }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Block export failed' }));
-      throw new Error(errorData.error || 'Block export failed');
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('video/mp4')) {
-      const blob = await response.blob();
-      const filename = getDownloadFilename(response, `Storyboard_Block_${String(blockIndex + 1).padStart(3, '0')}.mp4`);
-      downloadBlob(blob, filename);
-      return filename;
-    }
-
-    const data = await response.json();
-    return data.path || data.filename || `Block ${blockIndex + 1}`;
-  };
-
   const handleBatchDownload = async () => {
     const itemsToDownload = results.filter((item) => selectedIds.has(item.id));
     if (itemsToDownload.length === 0) return;
@@ -228,30 +200,70 @@ export default function Home() {
   };
 
   return (
-    <main>
-      <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div>
-          <h1>Vintage Media Scraper</h1>
-          <p style={{ color: 'var(--text-muted)' }}>
-            High-speed public domain asset finder for YouTube automation.
-          </p>
-        </div>
-        
-        <nav className="tab-nav">
-          <button 
-            className={`tab-btn ${activeTab === 'search' ? 'active' : ''}`}
-            onClick={() => setActiveTab('search')}
-          >
+    <main className="app-shell">
+      <header className="vitevid-nav">
+        <button type="button" className="vitevid-brand nav-link" onClick={() => setActiveTab('projects')}>
+          <span className="vitevid-mark">V</span>
+          <span><span className="green-text">Vite</span>Vid</span>
+        </button>
+
+        <nav className="vitevid-links" aria-label="Primary navigation">
+          <button type="button" className={`nav-link ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>
+            Projects
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'search' ? 'active' : ''}`} onClick={() => setActiveTab('search')}>
             Manual Search
           </button>
-          <button 
-            className={`tab-btn ${activeTab === 'script' ? 'active' : ''}`}
-            onClick={() => setActiveTab('script')}
-          >
+          <button type="button" className={`nav-link ${activeTab === 'script' ? 'active' : ''}`} onClick={() => setActiveTab('script')}>
             Auto Storyboard
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'pricing' ? 'active' : ''}`} onClick={() => setActiveTab('pricing')}>
+            Pricing
+          </button>
+          <button type="button" className="nav-link">
+            Login
           </button>
         </nav>
       </header>
+
+      {activeTab === 'projects' && (
+        <>
+          <section className="vitevid-hero">
+            <div className="vitevid-hero-inner">
+              <h1>
+                The <span className="green-text">Fastest</span> voiceover based video creation platform.
+              </h1>
+              <p>
+                ViteVid gives you professional-grade video at lightning speed. Instantly bring your voice over to live with our AI-powered framework.
+              </p>
+              <button type="button" className="primary hero-action" onClick={() => setActiveTab('script')}>
+                Get started here
+              </button>
+              <div className="hero-visual" aria-hidden="true">
+                <div className="hero-wave" />
+                <div className="hero-v">V</div>
+              </div>
+            </div>
+          </section>
+
+          <section className="vitevid-feature-grid">
+            <div className="feature-panel">
+              <h2>Real-Time Visuals</h2>
+              <p>ViteVid turns voiceover timing into searchable scenes, captions, sound effects, and export-ready video structure.</p>
+            </div>
+            <div className="project-card">
+              <h2>Projects</h2>
+              <p style={{ color: 'var(--text-muted)' }}>
+                Storyboard and Video Lab drafts are saved in this browser automatically. Full account login and cloud project storage should use Supabase or another database-backed auth system next.
+              </p>
+            </div>
+            <div className="feature-panel">
+              <h2>AI Insights</h2>
+              <p>Vitevid gives instant visualization to your voiceover and video with our ai-powered tools</p>
+            </div>
+          </section>
+        </>
+      )}
 
       {activeTab === 'search' ? (
         <>
@@ -283,14 +295,18 @@ export default function Home() {
             />
           </section>
         </>
-      ) : (
+      ) : activeTab === 'script' ? (
         <ScriptSequencer 
           onDownloadScene={triggerClip}
           onDownloadAsset={handleDownload}
-          onRenderBlock={renderBlock}
           isDownloading={(id) => downloadingItems.has(id)}
         />
-      )}
+      ) : activeTab === 'pricing' ? (
+        <section className="project-card">
+          <h1>Pricing</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Pricing plans are coming next for ViteVid.</p>
+        </section>
+      ) : null}
 
       {isPlayerLoading && (
         <div style={{

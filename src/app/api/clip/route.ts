@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import axios from 'axios';
 import os from 'os';
+import { canAutoUseMedia, withMediaRights } from '@/lib/mediaRights';
 
 // Ensure absolute path for FFmpeg on Windows
 const ffmpegStatic = require('ffmpeg-static');
@@ -21,10 +22,18 @@ function contentDispositionFilename(filename: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { item, start, end, customName } = await request.json();
+    let { item, start, end, customName } = await request.json();
     
     if (!item || start === undefined || end === undefined) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+
+    item = withMediaRights(item);
+    if (!canAutoUseMedia(item)) {
+      return NextResponse.json(
+        { error: 'This asset does not have a reusable license signal. Open the source page and verify rights before clipping.' },
+        { status: 403 },
+      );
     }
 
     // Detect if running on Vercel/Serverless

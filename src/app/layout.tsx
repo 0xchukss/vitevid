@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vintage Media Scraper",
-  description: "Build vintage media storyboards from narration.",
+  title: "ViteVid",
+  description: "Voiceover based video creation with AI-powered visuals.",
 };
 
 export default function RootLayout({

@@ -12,6 +12,9 @@ interface ResultCardProps {
 }
 
 export default function ResultCard({ item, onDownload, isSelected, onSelect, onOpenPlayer, localPath }: ResultCardProps) {
+  const rightsClass = item.isCopyrightSafe && !item.needsRightsReview ? 'safe' : 'review';
+  const rightsLabel = item.rightsLabel || (item.isCopyrightSafe ? 'License-filtered' : 'Review rights');
+
   const handleDragStart = (e: React.DragEvent) => {
     if (item.type === 'image') {
       console.log('Dragging image:', item.title);
@@ -65,6 +68,10 @@ export default function ResultCard({ item, onDownload, isSelected, onSelect, onO
         <div className="card-meta">
           <span>{item.source} {item.year ? `(${item.year})` : ''}</span>
           <span className={`badge ${item.type}`}>{item.type}</span>
+        </div>
+        <div className="rights-row" title={item.rightsNote || rightsLabel}>
+          <span className={`rights-pill ${rightsClass}`}>{rightsLabel}</span>
+          {item.needsRightsReview && <span>verify before publish</span>}
         </div>
         <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
           <button 

@@ -3,18 +3,27 @@
 import { useState } from 'react';
 
 interface SearchBarProps {
-  onSearch: (query: string, type: string, era: string) => void;
+  onSearch: (query: string, type: string, era: string, niche: string) => void;
   isLoading: boolean;
 }
+
+const SEARCH_NICHES = [
+  'history (vintage)',
+  'true crime',
+  'motivational',
+  'self improvement',
+  'personal finance and investing',
+];
 
 export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('all');
   const [era, setEra] = useState('');
+  const [niche, setNiche] = useState(SEARCH_NICHES[0]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch(query, type, era);
+    onSearch(query, type, era, niche);
   };
 
   return (
@@ -49,6 +58,14 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
               <option value="1940s">1940s</option>
               <option value="1950s">1950s</option>
               <option value="1960s">1960s</option>
+            </select>
+          </div>
+          <div className="filter-group">
+            <label>Niche:</label>
+            <select value={niche} onChange={(e) => setNiche(e.target.value)}>
+              {SEARCH_NICHES.map((entry) => (
+                <option key={entry} value={entry}>{entry}</option>
+              ))}
             </select>
           </div>
           <div className="filter-group">

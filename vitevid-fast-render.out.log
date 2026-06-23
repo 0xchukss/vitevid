@@ -1,0 +1,5 @@
+[2026-05-31T19:55:38.858Z] Prepared 10 unique real visual assets for 639 scenes.
+[2026-05-31T19:55:38.870Z] ffmpeg: mix 142 sound effects
+[2026-05-31T19:56:09.666Z] ffmpeg: render final mp4
+[2026-05-31T19:59:08.991Z] Verified output duration 1703.50s (target 1703.48s).
+[2026-05-31T19:59:08.992Z] Saved fast ViteVid render to C:\Users\Hp\Downloads\ViteVid_tts-audio-19_final.mp4
